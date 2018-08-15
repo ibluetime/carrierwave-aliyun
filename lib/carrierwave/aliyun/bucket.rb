@@ -34,12 +34,9 @@ module CarrierWave
         headers = {}
         headers['Content-Type'] = opts[:content_type] || 'image/jpg'
         content_disposition = opts[:content_disposition]
-        if content_disposition
-          headers['Content-Disposition'] = content_disposition
-        end
+        headers['Content-Disposition'] = content_disposition if content_disposition
 
-        res = oss_upload_client.bucket_create_object(path, file, headers)
-        if res.success?
+        if oss_upload_client.put_object(path, file: file.path, headers: headers)
           path_to_url(path)
         else
           raise 'Put file failed'
@@ -53,9 +50,10 @@ module CarrierWave
       # file data
       def get(path)
         path.sub!(PATH_PREFIX, '')
-        res = oss_upload_client.bucket_get_object(path)
-        if res.success?
-          return res
+        content = ''
+        res = oss_upload_client.get_object(path) { |c| content << c }
+        if res
+          { object: res, body: content }
         else
           raise 'Get content faild'
         end
@@ -70,9 +68,9 @@ module CarrierWave
       # 图片的下载地址
       def delete(path)
         path.sub!(PATH_PREFIX, '')
-        res = oss_upload_client.bucket_delete_object(path)
-        if res.success?
-          return path_to_url(path)
+
+        if oss_upload_client.delete_object(path)
+          path_to_url(path)
         else
           raise 'Delete failed'
         end
@@ -104,44 +102,31 @@ module CarrierWave
       end
 
       def head(path)
-        oss_client.bucket_get_meta_object(path)
+        oss_client.get_object(path)
       end
 
       private
 
       def oss_client
-        return @oss_client if defined?(@oss_client)
-        opts = {
-          host: "oss-#{@aliyun_area}.aliyuncs.com",
-          bucket: @aliyun_bucket
-        }
-        @oss_client = ::Aliyun::Oss::Client.new(@aliyun_access_id, @aliyun_access_key, opts)
+        @oss_client ||= client("oss-#{@aliyun_area}.aliyuncs.com").get_bucket(@aliyun_bucket)
       end
 
       def img_client
-        return @img_client if defined?(@img_client)
-        opts = {
-          host: "img-#{@aliyun_area}.aliyuncs.com",
-          bucket: @aliyun_bucket
-        }
-        @img_client = ::Aliyun::Oss::Client.new(@aliyun_access_id, @aliyun_access_key, opts)
+        @img_client ||= client("img-#{@aliyun_area}.aliyuncs.com").get_bucket(@aliyun_bucket)
       end
 
       def oss_upload_client
         return @oss_upload_client if defined?(@oss_upload_client)
 
-        host = if @aliyun_internal
-                 "oss-#{@aliyun_area}-internal.aliyuncs.com"
-               else
-                 "oss-#{@aliyun_area}.aliyuncs.com"
-               end
+        host = @aliyun_internal ? "oss-#{@aliyun_area}-internal.aliyuncs.com" : "oss-#{@aliyun_area}.aliyuncs.com"
 
-        opts = {
-          host: host,
-          bucket: @aliyun_bucket
-        }
+        @oss_upload_client = client(host).get_bucket(@aliyun_bucket)
+      end
 
-        @oss_upload_client = ::Aliyun::Oss::Client.new(@aliyun_access_id, @aliyun_access_key, opts)
+      def client(host)
+        @client ||= ::Aliyun::OSS::Client.new(
+          endpoint: host, access_key_id: @aliyun_access_id, access_key_secret: @aliyun_access_key
+        )
       end
     end
   end

@@ -11,8 +11,8 @@ module CarrierWave
 
       def read
         res = bucket.get(@path)
-        @headers = res.headers.deep_transform_keys { |k| k.underscore.to_sym rescue key }
-        res.body
+        @headers = res[:object].headers.deep_transform_keys { |k| k.underscore.to_sym rescue k }
+        res[:body]
       end
 
       def delete
@@ -38,7 +38,7 @@ module CarrierWave
       end
 
       def content_type
-        headers[:content_type].first
+        headers[:content_type]
       end
 
       def content_type=(new_content_type)
@@ -50,7 +50,11 @@ module CarrierWave
       end
 
       def headers
-        @headers ||= {}
+        @headers ||= bucket.head(@path).headers.deep_transform_keys { |k| k.underscore.to_sym rescue k } rescue {}
+      end
+
+      def empty?
+        @path.blank? rescue true
       end
 
       private
